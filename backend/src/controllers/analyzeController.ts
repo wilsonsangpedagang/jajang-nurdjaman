@@ -30,7 +30,7 @@ export async function analyzeProfile(req: AuthRequest, res: Response): Promise<v
     );
 
     const addressResponse = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${profile.latitude},${profile.longitude}&key=${process.env.GOOGLE_MAPS_API_KEY}`
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${profile.latitude},${profile.longitude}&key=${process.env.VITE_GOOGLE_MAPS_API_KEY}`
     );
     const addressData = (await addressResponse.json()) as {
       results: Array<{ formatted_address: string }>;

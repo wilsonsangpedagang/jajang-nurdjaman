@@ -1,8 +1,8 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_API_KEY = process.env.VITE_GEMINI_API_KEY!;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
 export interface GeminiAnalysisInput {
   businessName: string;
@@ -59,7 +59,7 @@ export async function runGeminiAnalysis(input: GeminiAnalysisInput): Promise<Ana
       generationConfig: {
         responseMimeType: "application/json",
         temperature: 0.7,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 8192,
       },
     }),
   });
