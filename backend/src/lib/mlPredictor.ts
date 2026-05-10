@@ -106,12 +106,12 @@ export async function runMLAnalysis(input: MLAnalysisInput): Promise<AnalysisRes
         } else {
           const preds = result.predictions;
           resolve({
-            successScore: preds.success_score,
+            successScore: Math.round(preds.success_score),
             scoreBreakdown: {
-              competitionDensity: preds.competition_density_score,
-              locationAppeal: preds.location_appeal_score,
-              marketDemand: preds.market_demand_score,
-              conceptUniqueness: preds.concept_uniqueness_score
+              competitionDensity: Math.round(preds.competition_density_score),
+              locationAppeal: Math.round(preds.location_appeal_score),
+              marketDemand: Math.round(preds.market_demand_score),
+              conceptUniqueness: Math.round(preds.concept_uniqueness_score)
             },
             // Since the local ML model only provides scores, we populate generic AI outputs
             swot: {
