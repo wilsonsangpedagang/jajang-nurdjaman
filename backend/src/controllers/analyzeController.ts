@@ -1,7 +1,7 @@
 import { Response } from "express";
 import { prisma } from "../lib/prisma";
 import { fetchNearbyCompetitors } from "../lib/places";
-import { runGeminiAnalysis } from "../lib/gemini";
+import { runMLAnalysis } from "../lib/mlPredictor";
 import { AuthRequest } from "../middleware/auth";
 
 export async function analyzeProfile(req: AuthRequest, res: Response): Promise<void> {
@@ -39,7 +39,7 @@ export async function analyzeProfile(req: AuthRequest, res: Response): Promise<v
 
     const products = (profile.products as Array<{ name: string; price: number }>) || [];
 
-    const analysisResult = await runGeminiAnalysis({
+    const analysisResult = await runMLAnalysis({
       businessName: profile.name,
       category: profile.category,
       concept: profile.concept,

@@ -1,0 +1,139 @@
+import { spawn, ChildProcess } from "child_process";
+import path from "path";
+import { EventEmitter } from "events";
+
+export interface MLAnalysisInput {
+  businessName: string;
+  category: string;
+  concept: string;
+  products: Array<{ name: string; price: number }>;
+  goals: string[];
+  location: { lat: number; lng: number; address: string };
+  radiusMeters: number;
+  competitors: Competitor[];
+}
+
+export interface Competitor {
+  name: string;
+  type: string;
+  rating: number | null;
+  userRatingsTotal: number | null;
+  vicinity: string;
+  distanceMeters: number;
+}
+
+export interface SwotAnalysis {
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  threats: string[];
+}
+
+export interface AnalysisResult {
+  swot: SwotAnalysis;
+  successScore: number;
+  scoreBreakdown: {
+    competitionDensity: number;
+    locationAppeal: number;
+    marketDemand: number;
+    conceptUniqueness: number;
+  };
+  strategicRoadmap: {
+    differentiation: string[];
+    pricing: string[];
+    marketing: string[];
+  };
+  summary: string;
+}
+
+let pythonProcess: ChildProcess | null = null;
+const eventEmitter = new EventEmitter();
+
+function getPythonProcess() {
+  if (!pythonProcess) {
+    const scriptPath = path.join(__dirname, "bvi_predictor.py");
+    // Attempt to use 'py' on Windows or 'python3' on Linux/Mac
+    const pythonCmd = process.platform === "win32" ? "py" : "python3";
+    
+    pythonProcess = spawn(pythonCmd, [scriptPath]);
+
+    let buffer = "";
+    pythonProcess.stdout?.on("data", (data) => {
+      buffer += data.toString();
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        if (line.trim()) {
+          try {
+            const result = JSON.parse(line);
+            eventEmitter.emit("prediction", result);
+          } catch (e) {
+            console.error("Failed to parse python output:", line);
+          }
+        }
+      }
+    });
+
+    pythonProcess.stderr?.on("data", (data) => {
+      console.error(`Python stderr: ${data}`);
+    });
+
+    pythonProcess.on("close", (code) => {
+      console.log(`Python process exited with code ${code}`);
+      pythonProcess = null;
+    });
+  }
+  return pythonProcess;
+}
+
+// Start the python process eagerly so the model loads in the background
+getPythonProcess();
+
+export async function runMLAnalysis(input: MLAnalysisInput): Promise<AnalysisResult> {
+  return new Promise((resolve, reject) => {
+    const proc = getPythonProcess();
+    if (!proc || !proc.stdin) {
+      return reject(new Error("Python process not available."));
+    }
+
+    const requestId = Date.now().toString() + Math.random().toString();
+    
+    const handler = (result: any) => {
+      if (result.id === requestId) {
+        eventEmitter.removeListener("prediction", handler);
+        if (result.status === "error") {
+          reject(new Error("ML Model Error: " + result.message));
+        } else {
+          const preds = result.predictions;
+          resolve({
+            successScore: preds.success_score,
+            scoreBreakdown: {
+              competitionDensity: preds.competition_density_score,
+              locationAppeal: preds.location_appeal_score,
+              marketDemand: preds.market_demand_score,
+              conceptUniqueness: preds.concept_uniqueness_score
+            },
+            // Since the local ML model only provides scores, we populate generic AI outputs
+            swot: {
+              strengths: ["Locally validated concept", "Data-driven positioning"],
+              weaknesses: ["Requires continuous market monitoring", "New entrant risks"],
+              opportunities: ["Local demand identified", "Potential for unique offerings"],
+              threats: ["Existing local competition", "Changing consumer preferences"]
+            },
+            strategicRoadmap: {
+              differentiation: ["Emphasize unique aspects of your concept"],
+              pricing: ["Monitor local averages closely"],
+              marketing: ["Focus on localized outreach"]
+            },
+            summary: `Based on a local ML analysis, the business has a success score of ${Math.round(preds.success_score)}/100. Consider the score breakdown for targeted improvements.`
+          });
+        }
+      }
+    };
+
+    eventEmitter.on("prediction", handler);
+    
+    // Add requestId to input so python passes it back
+    proc.stdin.write(JSON.stringify({ id: requestId, ...input }) + "\n");
+  });
+}
