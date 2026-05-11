@@ -1,8 +1,8 @@
 # AP Analytics
 
-**AI-Powered Business Location Intelligence for MSMEs**
+**AI-Powered Business Viability Intelligence for MSMEs**
 
-AP Analytics is a full-stack decision-support platform that acts as an automated business surveyor. It helps entrepreneurs evaluate the viability of a new business location using spatial data, real-time competitor analysis, and AI-generated strategic insights.
+AP Analytics helps entrepreneurs evaluate a business location using real-time competitor data and a local ML model (BVI — Business Viability Index).
 
 ---
 
@@ -11,85 +11,243 @@ AP Analytics is a full-stack decision-support platform that acts as an automated
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
-| Backend | Node.js + Express + TypeScript |
-| Database | PostgreSQL + PostGIS |
+| Backend | Node.js 20 + Express + TypeScript |
+| Database | PostgreSQL 16 + PostGIS 3.4 |
 | ORM | Prisma |
-| AI | Google Gemini 1.5 Flash |
+| ML | scikit-learn / XGBoost model (Python 3, subprocess bridge) |
 | Maps | Google Maps JS API + Google Places API |
-| Auth | JWT (bcrypt password hashing) |
+| Auth | JWT (bcryptjs, 7-day expiry) |
 
 ---
 
-## Features
+## Setup Guide
 
-- **Secure Authentication** — Email/password signup with JWT sessions
-- **Multi-Step Survey Wizard** — Guided 5-step business profiling
-- **Interactive Map** — Pin-drop location selector with dynamic radius circle
-- **Competitor Intelligence** — Real-time Google Places data for nearby competitors
-- **AI SWOT Analysis** — Gemini-generated Strengths, Weaknesses, Opportunities, Threats
-- **Predictive Success Score** — Radar chart with 4-dimension breakdown
-- **Strategic Roadmap** — AI tips for differentiation, pricing, and marketing
-- **Analysis History** — Dashboard to manage and review past surveys
+Read the label on each step before running it.
 
 ---
 
-## Quick Start
+### STEP 1 — Install system dependencies
+**Do this: once per machine, skip if already done**
 
-### Prerequisites
+You need these installed on your machine before anything else:
 
-- Node.js 20+
-- Docker & Docker Compose
-- Google Maps API Key (with Places API enabled)
-- Google Gemini API Key
+- **Node.js 20+** — check with `node --version`
+- **Python 3.9+** — check with `python3 --version`
+- **Docker Desktop** — download from [docker.com](https://docker.com/products/docker-desktop)
 
-### 1. Clone & Install
+---
+
+### STEP 2 — Clone the repo and install packages
+**Do this: once per clone**
 
 ```bash
-cd ap-analytics
-cp .env.example .env
-# Edit .env with your API keys
-
+git clone <repo-url>
+cd apanalytics
 npm run install:all
 ```
 
-### 2. Start Database
+`install:all` installs packages for the root, `backend/`, and `frontend/` in one command.
+
+---
+
+### STEP 3 — Install Python ML dependencies
+**Do this: once per machine, skip if already done**
 
 ```bash
-docker-compose up postgres -d
+pip3 install scikit-learn numpy pandas scipy xgboost
 ```
 
-### 3. Run Migrations
+To check if they're already installed:
+```bash
+python3 -c "import sklearn, numpy, pandas, scipy, xgboost; print('all good')"
+```
+
+If it prints `all good`, skip this step.
+
+---
+
+### STEP 4 — Get a Google Maps API key
+**Do this: once per developer account, skip if you already have a key**
+
+1. Go to [console.cloud.google.com/apis/credentials](https://console.cloud.google.com/apis/credentials)
+2. Create a project if you don't have one
+3. Enable these three APIs:
+   - **Maps JavaScript API**
+   - **Places API (New)**
+   - **Geocoding API**
+4. Click **Create Credentials → API Key** and copy it
+
+Keep the key ready — the setup script will ask for it the first time you start the app.
+
+> **Billing required.** Google Maps APIs require a billing-enabled project. New accounts get a free monthly credit that covers normal development usage.
+
+---
+
+### STEP 5 — Start Docker Desktop
+**Do this: every time before starting the app, skip if Docker is already running**
+
+Open **Docker Desktop** from your Applications folder. Wait until the whale icon in the menu bar stops animating (~30 seconds).
+
+To check if it's already running:
+```bash
+docker info > /dev/null 2>&1 && echo "Docker is running" || echo "Docker is NOT running"
+```
+
+---
+
+### STEP 6 — Start the database
+**Do this: every time before starting the app, skip if the container is already healthy**
 
 ```bash
-cd backend
-cp .env.example .env
-# Edit .env with your keys
+cd apanalytics
+docker compose up postgres -d
+```
+
+Check that it started correctly:
+```bash
+docker compose ps
+```
+
+The `STATUS` column for `ap_analytics_db` must say **healthy**. If it says `starting`, wait 15 seconds and check again.
+
+> **Port note:** The database runs on host port **5433** (not 5432). This is already configured correctly in the `.env` files.
+
+---
+
+### STEP 7 — Run the database migration
+**Do this: once after first clone, and again only if `prisma/schema.prisma` changes**
+
+```bash
+cd apanalytics/backend
 npx prisma migrate dev --name init
+cd ..
 ```
 
-### 4. Start Development Servers
+To check if the migration has already been run:
+```bash
+cd apanalytics/backend
+npx prisma migrate status
+```
+
+If it says `Database schema is up to date`, skip this step.
+
+---
+
+### STEP 8 — Fix script permissions (macOS only)
+**Do this: once after first `npm run install:all`, skip if already done**
 
 ```bash
-# Terminal 1 — Backend (port 4000)
-npm run dev:backend
-
-# Terminal 2 — Frontend (port 5173)
-cd frontend
-cp .env.example .env
-# Set VITE_GOOGLE_MAPS_API_KEY
-npm run dev:frontend
+cd apanalytics/backend
+chmod +x node_modules/.bin/tsx node_modules/.bin/prisma
+cd ../frontend
+chmod +x node_modules/.bin/vite
+cd ..
 ```
 
-Open [http://localhost:5173](http://localhost:5173)
+You only need to do this once. If you get `Permission denied` errors later, re-run it.
 
-### Full Docker Deployment
+---
+
+### STEP 9 — Start the app
+**Do this: every time you want to run the app**
 
 ```bash
-cp .env.example .env
-# Fill in all API keys
-
-docker-compose up --build
+cd apanalytics
+npm run dev
 ```
+
+**What happens automatically:**
+
+- If a Docker backend container is occupying port 4000, the setup script stops it for you
+- If your API keys are missing or not yet configured, you will be prompted:
+
+```
+┌──────────────────────────────────────────────┐
+│        AP Analytics — Environment Setup       │
+└──────────────────────────────────────────────┘
+  [1/1] Google Maps API Key
+        Paste key and press Enter: _
+```
+
+Paste your key and press Enter. `JWT_SECRET` is generated automatically — no input needed.
+
+- On every subsequent run, setup is skipped and both servers start immediately
+
+Once running:
+- Frontend → **http://localhost:5173** (or 5174 if 5173 is taken)
+- Backend API → **http://localhost:4000**
+
+---
+
+## Quick Reference
+
+### Starting from scratch (first time on this machine)
+
+Run all steps: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9
+
+### Returning to the project (already set up)
+
+Run only: **5 → 6 → 9**
+
+i.e.:
+```bash
+# Open Docker Desktop, wait for it to start, then:
+docker compose up postgres -d
+npm run dev
+```
+
+### After pulling new code from git
+
+```bash
+npm run install:all          # if package.json changed
+cd backend && npx prisma migrate dev --name update && cd ..   # if schema.prisma changed
+npm run dev
+```
+
+---
+
+## Troubleshooting
+
+**`Cannot connect to the Docker daemon`**
+Docker Desktop is not open. Open it from Applications and wait for the whale icon to stop animating.
+
+**`docker compose: no configuration file provided`**
+You are in the wrong folder. Run `cd apanalytics` first — `docker-compose.yml` lives inside `apanalytics/`, not the repo root.
+
+**`P1000: Authentication failed` (database)**
+The `DATABASE_URL` is wrong. It must be:
+```
+postgresql://postgres:password@localhost:5433/ap_analytics?schema=public
+```
+Note: password is `password`, database name is `ap_analytics`, port is `5433`.
+
+**`Permission denied` on tsx / vite / prisma**
+Run the chmod commands from Step 8.
+
+**Port 4000 already in use (Docker backend conflict)**
+`npm run dev` handles this automatically. If you are running the servers manually, stop the Docker backend first:
+```bash
+docker stop ap_analytics_backend
+```
+
+**`No module named 'xgboost'` in backend logs**
+Run Step 3. If `pip3 install` seems to succeed but the error persists, make sure you are using the same Python that the backend spawns:
+```bash
+which python3
+/Library/Frameworks/Python.framework/Versions/3.11/bin/pip3 install xgboost
+```
+
+**Maps show "API key not configured"**
+- Confirm `frontend/.env` has `VITE_GOOGLE_MAPS_API_KEY` set to a real key (not the placeholder)
+- Restart Vite after changing `.env` — Vite does not hot-reload env changes
+
+**Analysis fails silently**
+- Check that the backend terminal (cyan output) is not showing Python errors
+- Make sure Step 3 (Python packages) was done
+- Run `docker compose ps` — only `ap_analytics_db` should be running, not `ap_analytics_backend`
+
+**`Loader must not be called again with different options` (Google Maps)**
+This is a known issue when both MapPicker and CompetitorMap are on the same page. It is already fixed in the current codebase via a shared loader singleton in `src/lib/googleMapsLoader.ts`. If you see it, make sure you have the latest code.
 
 ---
 
@@ -97,74 +255,79 @@ docker-compose up --build
 
 ### Backend (`backend/.env`)
 
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Secret key for JWT signing (min 32 chars) |
-| `GOOGLE_MAPS_API_KEY` | Google Maps + Places API key |
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `FRONTEND_URL` | Frontend origin for CORS |
+| Variable | Required | Value for local dev |
+|----------|----------|---------------------|
+| `DATABASE_URL` | Yes | `postgresql://postgres:password@localhost:5433/ap_analytics?schema=public` |
+| `JWT_SECRET` | Yes | Auto-generated by `npm run dev` |
+| `GOOGLE_MAPS_API_KEY` | Yes | Your API key — set by `npm run dev` on first run |
+| `FRONTEND_URL` | No | Defaults to `http://localhost:5173` |
+| `PORT` | No | Defaults to `4000` |
 
 ### Frontend (`frontend/.env`)
 
-| Variable | Description |
-|----------|-------------|
-| `VITE_API_URL` | Backend API base URL |
-| `VITE_GOOGLE_MAPS_API_KEY` | Google Maps JS API key |
+| Variable | Required | Value for local dev |
+|----------|----------|---------------------|
+| `VITE_GOOGLE_MAPS_API_KEY` | Yes | Your API key — set by `npm run dev` on first run |
+| `VITE_API_URL` | No | Leave blank — Vite proxies `/api` to `localhost:4000` automatically |
 
 ---
 
-## API Endpoints
+## Full Docker Deployment
 
-| Method | Path | Description |
-|--------|------|-------------|
-| POST | `/api/auth/register` | Create new user account |
-| POST | `/api/auth/login` | Authenticate user |
-| GET | `/api/auth/me` | Get current user |
-| GET | `/api/business` | List user's profiles |
-| POST | `/api/business` | Create business profile |
-| GET | `/api/business/:id` | Get single profile |
-| DELETE | `/api/business/:id` | Delete profile |
-| POST | `/api/analyze/:profileId` | Run AI analysis |
+To run everything inside Docker (database + backend + frontend):
 
----
-
-## Database Schema
-
+```bash
+cd apanalytics
+cp .env.example .env
+# Open .env and fill in JWT_SECRET, GOOGLE_MAPS_API_KEY, VITE_GOOGLE_MAPS_API_KEY
+docker compose up --build
 ```
-users
-  id, email, passwordHash, name, createdAt, updatedAt
 
-business_profiles
-  id, userId, name, category, concept
-  products (JSON), goals (String[])
-  latitude, longitude, radiusMeters
-  analysisResult (JSON), status
-  createdAt, updatedAt
-```
+- Frontend → `http://localhost:5173`
+- Backend → `http://localhost:4000`
+
+> Do **not** run `npm run dev` while the full Docker stack is up — they compete for the same ports.
 
 ---
 
 ## Project Structure
 
 ```
-ap-analytics/
-├── backend/
-│   ├── prisma/schema.prisma
-│   ├── src/
-│   │   ├── controllers/     # Request handlers
-│   │   ├── lib/             # Gemini + Places + Prisma
-│   │   ├── middleware/      # Auth + validation
-│   │   └── routes/          # Express routers
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # Reusable UI components
-│   │   ├── contexts/        # Auth + Wizard state
-│   │   ├── pages/           # Route pages + wizard steps
-│   │   ├── lib/             # API client + utils
-│   │   └── types/           # TypeScript types
-│   └── package.json
+apanalytics/
+├── setup.mjs                 # Interactive setup script (runs before dev servers)
+├── .env.example              # Root env template (for docker-compose)
 ├── docker-compose.yml
-└── README.md
+├── backend/
+│   ├── .env.example
+│   ├── data/jakarta_rwi.csv  # Relative Wealth Index data for Jakarta
+│   ├── business_viability_model.pkl
+│   ├── prisma/schema.prisma
+│   └── src/
+│       ├── controllers/      # Auth, business, analyze
+│       ├── lib/              # Prisma client, Google Places, ML predictor bridge
+│       ├── middleware/       # JWT auth, express-validator
+│       └── routes/
+└── frontend/
+    └── src/
+        ├── components/       # Navbar, ScoreDisplay, SwotCard, maps, etc.
+        ├── contexts/         # AuthContext, WizardContext
+        ├── lib/              # Axios API client, shared Google Maps loader, utils
+        ├── pages/            # All pages + wizard steps
+        └── types/            # Shared TypeScript types
 ```
+
+---
+
+## API Reference
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/register` | — | Create account |
+| POST | `/api/auth/login` | — | Sign in, get JWT |
+| GET | `/api/auth/me` | JWT | Validate token / get current user |
+| GET | `/api/business` | JWT | List all profiles |
+| POST | `/api/business` | JWT | Create business profile |
+| GET | `/api/business/:id` | JWT | Get single profile |
+| DELETE | `/api/business/:id` | JWT | Delete profile |
+| POST | `/api/analyze/:profileId` | JWT | Run BVI analysis |
+| GET | `/api/health` | — | Health check |

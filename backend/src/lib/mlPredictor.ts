@@ -46,16 +46,23 @@ export interface AnalysisResult {
   summary: string;
 }
 
+const ML_TIMEOUT_MS = 60_000;
+
 let pythonProcess: ChildProcess | null = null;
 const eventEmitter = new EventEmitter();
+eventEmitter.setMaxListeners(50);
 
 function getPythonProcess() {
   if (!pythonProcess) {
-    const scriptPath = path.join(__dirname, "bvi_predictor.py");
-    // Attempt to use 'py' on Windows or 'python3' on Linux/Mac
+    // Works from both src/lib (dev/tsx) and dist/lib (compiled):
+    // both resolve to backend/src/lib/bvi_predictor.py
+    const scriptPath = path.resolve(__dirname, "../../src/lib/bvi_predictor.py");
+    const fallbackPath = path.join(__dirname, "bvi_predictor.py");
+    const resolvedScript = require("fs").existsSync(scriptPath) ? scriptPath : fallbackPath;
+
     const pythonCmd = process.platform === "win32" ? "py" : "python3";
-    
-    pythonProcess = spawn(pythonCmd, [scriptPath]);
+
+    pythonProcess = spawn(pythonCmd, [resolvedScript]);
 
     let buffer = "";
     pythonProcess.stdout?.on("data", (data) => {
@@ -81,6 +88,8 @@ function getPythonProcess() {
     pythonProcess.on("close", (code) => {
       console.log(`Python process exited with code ${code}`);
       pythonProcess = null;
+      // Reject all in-flight requests so their Promises don't hang forever
+      eventEmitter.emit("process_closed");
     });
   }
   return pythonProcess;
@@ -97,42 +106,66 @@ export async function runMLAnalysis(input: MLAnalysisInput): Promise<AnalysisRes
     }
 
     const requestId = Date.now().toString() + Math.random().toString();
-    
-    const handler = (result: any) => {
-      if (result.id === requestId) {
-        eventEmitter.removeListener("prediction", handler);
-        if (result.status === "error") {
-          reject(new Error("ML Model Error: " + result.message));
-        } else {
-          const preds = result.predictions;
-          resolve({
-            successScore: Math.round(preds.success_score),
-            scoreBreakdown: {
-              competitionDensity: Math.round(preds.competition_density_score),
-              locationAppeal: Math.round(preds.location_appeal_score),
-              marketDemand: Math.round(preds.market_demand_score),
-              conceptUniqueness: Math.round(preds.concept_uniqueness_score)
-            },
-            // Since the local ML model only provides scores, we populate generic AI outputs
-            swot: {
-              strengths: ["Locally validated concept", "Data-driven positioning"],
-              weaknesses: ["Requires continuous market monitoring", "New entrant risks"],
-              opportunities: ["Local demand identified", "Potential for unique offerings"],
-              threats: ["Existing local competition", "Changing consumer preferences"]
-            },
-            strategicRoadmap: {
-              differentiation: ["Emphasize unique aspects of your concept"],
-              pricing: ["Monitor local averages closely"],
-              marketing: ["Focus on localized outreach"]
-            },
-            summary: `Based on a local ML analysis, the business has a success score of ${Math.round(preds.success_score)}/100. Consider the score breakdown for targeted improvements.`
-          });
-        }
+    let settled = false;
+
+    const cleanup = () => {
+      eventEmitter.removeListener("prediction", predictionHandler);
+      eventEmitter.removeListener("process_closed", closedHandler);
+    };
+
+    const predictionHandler = (result: any) => {
+      if (result.id !== requestId) return;
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (result.status === "error") {
+        reject(new Error("ML Model Error: " + result.message));
+      } else {
+        const preds = result.predictions;
+        resolve({
+          successScore: Math.round(preds.success_score),
+          scoreBreakdown: {
+            competitionDensity: Math.round(preds.competition_density_score),
+            locationAppeal: Math.round(preds.location_appeal_score),
+            marketDemand: Math.round(preds.market_demand_score),
+            conceptUniqueness: Math.round(preds.concept_uniqueness_score)
+          },
+          swot: {
+            strengths: ["Locally validated concept", "Data-driven positioning"],
+            weaknesses: ["Requires continuous market monitoring", "New entrant risks"],
+            opportunities: ["Local demand identified", "Potential for unique offerings"],
+            threats: ["Existing local competition", "Changing consumer preferences"]
+          },
+          strategicRoadmap: {
+            differentiation: ["Emphasize unique aspects of your concept"],
+            pricing: ["Monitor local averages closely"],
+            marketing: ["Focus on localized outreach"]
+          },
+          summary: `Based on a local ML analysis, the business has a success score of ${Math.round(preds.success_score)}/100. Consider the score breakdown for targeted improvements.`
+        });
       }
     };
 
-    eventEmitter.on("prediction", handler);
-    
+    const closedHandler = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("Python process closed unexpectedly."));
+    };
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(new Error("ML analysis timed out after 60s."));
+    }, ML_TIMEOUT_MS);
+
+    // Ensure timer doesn't block Node.js from exiting
+    if (timer.unref) timer.unref();
+
+    eventEmitter.on("prediction", predictionHandler);
+    eventEmitter.on("process_closed", closedHandler);
+
     // Add requestId to input so python passes it back
     proc.stdin.write(JSON.stringify({ id: requestId, ...input }) + "\n");
   });

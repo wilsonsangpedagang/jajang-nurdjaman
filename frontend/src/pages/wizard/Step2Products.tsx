@@ -1,12 +1,7 @@
 import { useState } from "react";
 import { useWizard } from "@/contexts/WizardContext";
 import type { Product } from "@/types";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight, ArrowLeft, ShoppingBag, Plus, Trash2 } from "lucide-react";
-import { formatPrice } from "@/lib/utils";
+import { ArrowLeft, ArrowRight, Plus, Trash2 } from "lucide-react";
 
 export default function Step2Products() {
   const { data, updateData, setStep } = useWizard();
@@ -23,76 +18,100 @@ export default function Step2Products() {
   };
 
   const updateProduct = (i: number, field: keyof Product, value: string | number) => {
-    setProducts(products.map((p, idx) => idx === i ? { ...p, [field]: value } : p));
+    setProducts(products.map((p, idx) => (idx === i ? { ...p, [field]: value } : p)));
   };
 
   const handleNext = () => {
     const valid = products.filter((p) => p.name.trim() && p.price > 0);
-    if (valid.length === 0) { setError("Add at least one product or service with a name and price."); return; }
+    if (valid.length === 0) {
+      setError("Add at least one product or service with a name and price.");
+      return;
+    }
     updateData({ products: valid });
     setStep(3);
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-            <ShoppingBag className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <CardTitle>Product & Service Catalog</CardTitle>
-            <CardDescription>List your key offerings with indicative prices (IDR)</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-3">
-          {products.map((product, i) => (
-            <div key={i} className="flex items-end gap-2">
-              <div className="flex-1 space-y-1.5">
-                <Label htmlFor={`prod-name-${i}`}>{i === 0 ? "Product / Service Name" : ""}</Label>
-                <Input id={`prod-name-${i}`} placeholder="e.g. Signature Latte" value={product.name} onChange={(e) => updateProduct(i, "name", e.target.value)} />
-              </div>
-              <div className="w-36 space-y-1.5">
-                <Label htmlFor={`prod-price-${i}`}>{i === 0 ? "Price (IDR)" : ""}</Label>
-                <Input id={`prod-price-${i}`} type="number" placeholder="35000" value={product.price || ""} onChange={(e) => updateProduct(i, "price", Number(e.target.value))} min={0} />
-              </div>
-              <Button variant="ghost" size="icon" onClick={() => removeProduct(i)} disabled={products.length === 1} className="mb-0.5 text-muted-foreground hover:text-destructive">
-                <Trash2 className="h-4 w-4" />
-              </Button>
+    <div className="space-y-10">
+      {/* ── Heading ─────────────────────────────────────────────────────── */}
+      <div>
+        <h2 className="text-lg font-bold text-foreground">Input your product name!</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          List your key offerings with their prices (IDR). You can add multiple products.
+        </p>
+      </div>
+
+      {/* ── Product rows ────────────────────────────────────────────────── */}
+      <div className="space-y-3">
+        {products.map((product, i) => (
+          <div key={i} className="group flex items-center gap-2">
+            {/* Name */}
+            <div className="flex flex-1 items-center gap-2 rounded-2xl border border-card-border bg-white px-4 py-3 shadow-sm focus-within:border-foreground focus-within:ring-1 focus-within:ring-foreground transition-all">
+              <input
+                type="text"
+                placeholder={`Product ${i + 1} name — e.g. Signature Latte`}
+                value={product.name}
+                onChange={(e) => updateProduct(i, "name", e.target.value)}
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+              />
+              <ArrowRight className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground/30" />
             </div>
-          ))}
-        </div>
 
-        {products.some((p) => p.name && p.price > 0) && (
-          <div className="rounded-lg bg-muted/50 p-3">
-            <p className="text-xs font-medium text-muted-foreground mb-2">Preview</p>
-            <div className="flex flex-wrap gap-2">
-              {products.filter((p) => p.name && p.price > 0).map((p, i) => (
-                <span key={i} className="rounded-full bg-background border px-3 py-1 text-xs font-medium">
-                  {p.name} — {formatPrice(p.price)}
-                </span>
-              ))}
+            {/* Price */}
+            <div className="flex w-32 items-center rounded-2xl border border-card-border bg-white px-3 py-3 shadow-sm focus-within:border-foreground focus-within:ring-1 focus-within:ring-foreground transition-all">
+              <span className="mr-1.5 text-xs text-muted-foreground">Rp</span>
+              <input
+                type="number"
+                placeholder="35000"
+                value={product.price || ""}
+                onChange={(e) => updateProduct(i, "price", Number(e.target.value))}
+                min={0}
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+              />
             </div>
+
+            {/* Remove */}
+            <button
+              onClick={() => removeProduct(i)}
+              disabled={products.length === 1}
+              className="rounded-full p-2 text-muted-foreground/40 transition-colors hover:text-destructive disabled:opacity-0"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           </div>
-        )}
+        ))}
+      </div>
 
-        <Button variant="outline" onClick={addProduct} className="w-full">
-          <Plus className="h-4 w-4" /> Add Another Item
-        </Button>
+      {/* ── Add row ─────────────────────────────────────────────────────── */}
+      <button
+        onClick={addProduct}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-card-border py-3 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
+      >
+        <Plus className="h-4 w-4" />
+        Add another item
+      </button>
 
-        {error && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      {error && (
+        <p className="rounded-xl bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
-        <div className="flex justify-between">
-          <Button variant="outline" onClick={() => setStep(1)}>
-            <ArrowLeft className="h-4 w-4" /> Back
-          </Button>
-          <Button onClick={handleNext}>
-            Continue <ArrowRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      {/* ── Navigation ──────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => setStep(1)}
+          className="flex items-center gap-2 rounded-full border border-card-border px-6 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+        <button
+          onClick={handleNext}
+          className="flex items-center gap-2 rounded-full bg-foreground px-7 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-80"
+        >
+          Continue <ArrowRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
   );
 }

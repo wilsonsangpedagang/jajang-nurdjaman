@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader } from "@googlemaps/js-api-loader";
+import { mapsLoader } from "@/lib/googleMapsLoader";
 import { MapPin } from "lucide-react";
 
 interface MapPickerProps {
@@ -16,8 +16,15 @@ export default function MapPicker({ latitude, longitude, radiusMeters, onLocatio
   const mapInstanceRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
   const circleRef = useRef<google.maps.Circle | null>(null);
+  const clickListenerRef = useRef<google.maps.MapsEventListener | null>(null);
+  // Keep onLocationChange in a ref so the click listener never goes stale
+  const onLocationChangeRef = useRef(onLocationChange);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onLocationChangeRef.current = onLocationChange;
+  }, [onLocationChange]);
 
   useEffect(() => {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
@@ -26,13 +33,7 @@ export default function MapPicker({ latitude, longitude, radiusMeters, onLocatio
       return;
     }
 
-    const loader = new Loader({
-      apiKey,
-      version: "weekly",
-      libraries: ["places", "geometry"],
-    });
-
-    loader.load().then(() => {
+    mapsLoader.load().then(() => {
       setIsLoaded(true);
     }).catch((err: unknown) => {
       setLoadError(`Failed to load Google Maps: ${String(err)}`);
@@ -61,15 +62,31 @@ export default function MapPicker({ latitude, longitude, radiusMeters, onLocatio
       placeMarkerAndCircle(map, { lat: latitude, lng: longitude });
     }
 
-    map.addListener("click", (e: google.maps.MapMouseEvent) => {
+    clickListenerRef.current = map.addListener("click", (e: google.maps.MapMouseEvent) => {
       if (e.latLng) {
         const lat = e.latLng.lat();
         const lng = e.latLng.lng();
         placeMarkerAndCircle(map, { lat, lng });
-        onLocationChange(lat, lng);
+        onLocationChangeRef.current(lat, lng);
       }
     });
-  }, [isLoaded]);
+
+    return () => {
+      if (clickListenerRef.current) {
+        google.maps.event.removeListener(clickListenerRef.current);
+        clickListenerRef.current = null;
+      }
+      if (markerRef.current) {
+        markerRef.current.setMap(null);
+        markerRef.current = null;
+      }
+      if (circleRef.current) {
+        circleRef.current.setMap(null);
+        circleRef.current = null;
+      }
+      mapInstanceRef.current = null;
+    };
+  }, [isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (circleRef.current) {
@@ -105,7 +122,7 @@ export default function MapPicker({ latitude, longitude, radiusMeters, onLocatio
         const lat = e.latLng.lat();
         const lng = e.latLng.lng();
         circle.setCenter({ lat, lng });
-        onLocationChange(lat, lng);
+        onLocationChangeRef.current(lat, lng);
       }
     });
 
