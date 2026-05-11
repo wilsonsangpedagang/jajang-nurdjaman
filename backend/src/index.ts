@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import authRoutes from "./routes/auth";
 import businessRoutes from "./routes/business";
 import analyzeRoutes from "./routes/analyze";
+import zoneRoutes from "./routes/zone";
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use(limiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/business", businessRoutes);
 app.use("/api/analyze", analyzeRoutes);
+app.use("/api/zone", zoneRoutes);
 
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });

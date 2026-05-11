@@ -10,9 +10,10 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 # Install Python 3 and ML dependencies for the BVI predictor
-RUN apk add --no-cache python3 py3-pip py3-numpy py3-scipy && \
+RUN apk add --no-cache python3 py3-pip py3-numpy py3-scipy \
+      gcc musl-dev python3-dev py3-gdal libgeos-dev && \
     pip3 install --no-cache-dir --break-system-packages \
-      scikit-learn pandas xgboost
+      scikit-learn pandas xgboost geopandas shapely
 
 COPY package*.json ./
 RUN npm ci --omit=dev

@@ -1,8 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ScoreBreakdown } from "@/types";
-import {
-  BarChart, Bar, XAxis, YAxis, Cell, ResponsiveContainer, Tooltip,
-} from "recharts";
 import { getScoreLabel } from "@/lib/utils";
 
 interface ScoreDisplayProps {
@@ -11,73 +8,30 @@ interface ScoreDisplayProps {
   summary: string;
 }
 
-/* Breakdown → bar chart data with colours matching the mockup */
-function buildBarData(breakdown: ScoreBreakdown) {
-  return [
-    { label: "COMP\nDENSITY",    shortLabel: "Comp Density",    value: breakdown.competitionDensity, color: "hsl(var(--bar-lavender))" },
-    { label: "LOCATION\nAPPEAL", shortLabel: "Location Appeal", value: breakdown.locationAppeal,     color: "hsl(var(--bar-rose))"     },
-    { label: "CONCEPT\nUNIQUE.", shortLabel: "Concept Unique.", value: breakdown.conceptUniqueness,  color: "hsl(var(--bar-plum))"     },
-    { label: "MARKET\nDEMAND",   shortLabel: "Market Demand",   value: breakdown.marketDemand,       color: "hsl(var(--bar-lavender))" },
-  ];
-}
+const BARS = [
+  { key: "competitionDensity" as const, label: "Competition Density", fromCls: "from-violet-500/70", toCls: "to-violet-400" },
+  { key: "locationAppeal"     as const, label: "Location Appeal",     fromCls: "from-rose-500/70",   toCls: "to-rose-400"   },
+  { key: "marketDemand"       as const, label: "Market Demand",       fromCls: "from-sky-500/70",    toCls: "to-sky-400"    },
+  { key: "conceptUniqueness"  as const, label: "Concept Uniqueness",  fromCls: "from-amber-500/70",  toCls: "to-amber-400"  },
+];
 
-/* Custom tooltip */
-function CustomTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: { shortLabel: string }; value: number }> }) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-xl border border-card-border bg-white px-3 py-2 text-xs shadow-lg">
-      <div className="font-semibold text-foreground">{payload[0].payload.shortLabel}</div>
-      <div className="text-muted-foreground">{payload[0].value} / 100</div>
-    </div>
-  );
-}
-
-/* Custom X-axis tick — wrap multi-line labels */
-function CustomTick({ x, y, payload }: { x?: number; y?: number; payload?: { value: string } }) {
-  if (!x || !y || !payload) return null;
-  const lines = payload.value.split("\n");
-  return (
-    <g transform={`translate(${x},${y})`}>
-      {lines.map((line, i) => (
-        <text
-          key={i}
-          x={0}
-          y={0}
-          dy={12 + i * 12}
-          textAnchor="middle"
-          fill="hsl(var(--muted-foreground))"
-          fontSize={9}
-          fontWeight={600}
-          letterSpacing={0.5}
-        >
-          {line}
-        </text>
-      ))}
-    </g>
-  );
-}
-
-/* Animated donut component */
-function ScoreDonut({ score }: { score: number }) {
+function ScoreRing({ score }: { score: number }) {
   const circleRef = useRef<SVGCircleElement>(null);
-  const r     = 82;
-  const circ  = 2 * Math.PI * r;
-  const dash  = (score / 100) * circ;
+  const r    = 88;
+  const circ = 2 * Math.PI * r;
+  const dash = (score / 100) * circ;
 
-  /* Olive for viable, orange for moderate, rose for risk */
   const ringColor =
-    score >= 70
-      ? "hsl(var(--olive))"
-      : score >= 45
-      ? "hsl(var(--bvi-orange))"
-      : "hsl(0 84% 60%)";
+    score >= 70 ? "#22c55e"
+    : score >= 45 ? "#f59e0b"
+    : "#ef4444";
 
   useEffect(() => {
     if (!circleRef.current) return;
     circleRef.current.style.strokeDasharray = `0 ${circ}`;
     requestAnimationFrame(() => {
       if (!circleRef.current) return;
-      circleRef.current.style.transition = "stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)";
+      circleRef.current.style.transition = "stroke-dasharray 1.4s cubic-bezier(.4,0,.2,1)";
       circleRef.current.style.strokeDasharray = `${dash} ${circ}`;
     });
   }, [score, dash, circ]);
@@ -85,25 +39,38 @@ function ScoreDonut({ score }: { score: number }) {
   return (
     <div className="relative h-52 w-52 flex-shrink-0">
       <svg viewBox="0 0 200 200" className="h-full w-full -rotate-90">
-        <circle
-          cx="100" cy="100" r={r}
-          fill="none"
-          stroke="hsl(var(--cream))"
-          strokeWidth="18"
-        />
+        <defs>
+          <filter id="ring-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        {/* Track */}
+        <circle cx="100" cy="100" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={12} />
+        {/* Arc */}
         <circle
           ref={circleRef}
           cx="100" cy="100" r={r}
           fill="none"
           stroke={ringColor}
-          strokeWidth="18"
+          strokeWidth={12}
           strokeLinecap="round"
-          style={{ strokeDasharray: `${dash} ${circ}` }}
+          filter="url(#ring-glow)"
+          style={{ strokeDasharray: `0 ${circ}` }}
         />
       </svg>
-      {/* Score text — inside the donut */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center rotate-0">
-        <span className="font-display text-2xl font-black leading-none text-foreground/30">
+      {/* Score inside ring */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span
+          className="font-display text-5xl font-black leading-none tabular-nums"
+          style={{ color: ringColor }}
+        >
+          {score}
+        </span>
+        <span className="mt-1 text-xs font-semibold uppercase tracking-widest text-slate-400">
           {getScoreLabel(score)}
         </span>
       </div>
@@ -112,70 +79,69 @@ function ScoreDonut({ score }: { score: number }) {
 }
 
 export default function ScoreDisplay({ score, breakdown, summary }: ScoreDisplayProps) {
-  const barData = buildBarData(breakdown);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setMounted(true), 150);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <div className="space-y-8">
-      {/* ── Giant score row ─────────────────────────────────────────────── */}
+      {/* Score ring + label */}
       <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-center">
-        <ScoreDonut score={score} />
+        <ScoreRing score={score} />
         <div>
+          <div className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-1">
+            BVI Score
+          </div>
           <div
-            className="font-display leading-none font-black"
+            className="font-display font-black leading-none"
             style={{
-              fontSize: "clamp(4rem, 10vw, 8rem)",
-              color:
-                score >= 70
-                  ? "hsl(var(--olive))"
-                  : score >= 45
-                  ? "hsl(var(--bvi-orange))"
-                  : "hsl(0 84% 60%)",
+              fontSize: "clamp(3.5rem, 9vw, 6rem)",
+              color: score >= 70 ? "#22c55e" : score >= 45 ? "#f59e0b" : "#ef4444",
             }}
           >
             {score}%
           </div>
-          <div className="mt-1 text-2xl font-bold text-foreground">BVI Score</div>
-          <div className="mt-2 text-sm text-muted-foreground">{getScoreLabel(score)} viability</div>
+          <div className="mt-1 text-lg font-semibold text-white">Business Viability Index</div>
+          <div className="mt-1 text-sm text-slate-400">{getScoreLabel(score)} viability</div>
         </div>
       </div>
 
-      {/* ── Bar chart breakdown ─────────────────────────────────────────── */}
+      {/* Horizontal bar breakdown */}
       <div>
-        <div className="mb-4 text-sm font-bold uppercase tracking-widest text-muted-foreground">
+        <div className="mb-4 text-xs font-bold uppercase tracking-widest text-slate-500">
           Score Breakdown
         </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={barData} margin={{ top: 8, right: 0, left: -28, bottom: 24 }} barCategoryGap="22%">
-            <XAxis
-              dataKey="label"
-              tick={CustomTick as unknown as React.ReactElement}
-              interval={0}
-              axisLine={false}
-              tickLine={false}
-            />
-            <YAxis
-              domain={[0, 100]}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-              axisLine={false}
-              tickLine={false}
-            />
-            <Tooltip content={<CustomTooltip />} cursor={{ fill: "hsl(var(--muted))", radius: 8 }} />
-            <Bar dataKey="value" radius={[8, 8, 0, 0]} maxBarSize={72}>
-              {barData.map((entry, i) => (
-                <Cell key={i} fill={entry.color} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+        <div className="space-y-3.5">
+          {BARS.map((bar) => {
+            const value = breakdown[bar.key];
+            return (
+              <div key={bar.key}>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-slate-400">{bar.label}</span>
+                  <span className="font-semibold tabular-nums text-white">{value}<span className="text-slate-500">/100</span></span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
+                  <div
+                    className={`h-full rounded-full bg-gradient-to-r ${bar.fromCls} ${bar.toCls} transition-[width] duration-1000 ease-out`}
+                    style={{ width: mounted ? `${value}%` : "0%" }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ── AI summary ─────────────────────────────────────────────────── */}
-      <div className="rounded-2xl border border-card-border bg-white p-6">
-        <div className="mb-3 flex items-center gap-2 text-base font-bold text-foreground">
-          <span>🧠</span>
-          <span>Critical<br />Market Insight</span>
+      {/* AI summary */}
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-xl">
+        <div className="mb-3 flex items-center gap-2">
+          <span className="text-base">🧠</span>
+          <span className="text-sm font-bold text-white">Market Insight</span>
         </div>
-        <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p>
+        <p className="text-sm leading-relaxed text-slate-300">{summary}</p>
       </div>
     </div>
   );
