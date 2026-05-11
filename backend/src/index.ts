@@ -9,6 +9,15 @@ import analyzeRoutes from "./routes/analyze";
 
 dotenv.config();
 
+/* ── Startup: fail fast on missing required env vars ────────────────────── */
+const REQUIRED_ENV = ["DATABASE_URL", "JWT_SECRET", "GOOGLE_MAPS_API_KEY"] as const;
+const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+if (missing.length > 0) {
+  console.error(`[startup] Missing required environment variables: ${missing.join(", ")}`);
+  console.error("[startup] Copy backend/.env.example to backend/.env and fill in all values.");
+  process.exit(1);
+}
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 

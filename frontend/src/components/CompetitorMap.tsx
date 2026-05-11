@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader } from "@googlemaps/js-api-loader";
+import { mapsLoader } from "@/lib/googleMapsLoader";
 import type { Competitor } from "@/types";
 import { MapPin } from "lucide-react";
 import { formatDistance } from "@/lib/utils";
@@ -13,20 +13,25 @@ interface CompetitorMapProps {
 
 export default function CompetitorMap({ latitude, longitude, radiusMeters, competitors }: CompetitorMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<google.maps.Map | null>(null);
+  const markersRef = useRef<google.maps.Marker[]>([]);
+  const circleRef = useRef<google.maps.Circle | null>(null);
+  const infoWindowRef = useRef<google.maps.InfoWindow | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedCompetitor, setSelectedCompetitor] = useState<Competitor | null>(null);
 
+  // Load Google Maps SDK once (shared singleton — avoids "called with different options" error)
   useEffect(() => {
     const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
     if (!apiKey || apiKey === "your-google-maps-api-key") {
       setLoadError("Google Maps API key not configured.");
       return;
     }
-    const loader = new Loader({ apiKey, version: "weekly" });
-    loader.load().then(() => setIsLoaded(true)).catch(() => setLoadError("Failed to load map."));
+    mapsLoader.load().then(() => setIsLoaded(true)).catch(() => setLoadError("Failed to load map."));
   }, []);
 
+  // Initialize map once the SDK is ready
   useEffect(() => {
     if (!isLoaded || !mapRef.current) return;
 
@@ -38,17 +43,10 @@ export default function CompetitorMap({ latitude, longitude, radiusMeters, compe
       fullscreenControl: false,
     });
 
-    new google.maps.Circle({
-      center: { lat: latitude, lng: longitude },
-      radius: radiusMeters,
-      map,
-      fillColor: "#3b82f6",
-      fillOpacity: 0.08,
-      strokeColor: "#3b82f6",
-      strokeOpacity: 0.6,
-      strokeWeight: 2,
-    });
+    mapInstanceRef.current = map;
+    infoWindowRef.current = new google.maps.InfoWindow();
 
+    // Business location marker
     new google.maps.Marker({
       position: { lat: latitude, lng: longitude },
       map,
@@ -64,9 +62,40 @@ export default function CompetitorMap({ latitude, longitude, radiusMeters, compe
       zIndex: 10,
     });
 
-    const infoWindow = new google.maps.InfoWindow();
+    return () => {
+      infoWindowRef.current?.close();
+      infoWindowRef.current = null;
+      mapInstanceRef.current = null;
+    };
+  }, [isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    competitors.forEach((competitor) => {
+  // Re-render circle and competitor markers whenever data changes
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    // Clear previous circle
+    if (circleRef.current) {
+      circleRef.current.setMap(null);
+    }
+    circleRef.current = new google.maps.Circle({
+      center: { lat: latitude, lng: longitude },
+      radius: radiusMeters,
+      map,
+      fillColor: "#3b82f6",
+      fillOpacity: 0.08,
+      strokeColor: "#3b82f6",
+      strokeOpacity: 0.6,
+      strokeWeight: 2,
+    });
+
+    // Clear previous competitor markers
+    for (const m of markersRef.current) m.setMap(null);
+    markersRef.current = [];
+
+    const infoWindow = infoWindowRef.current;
+
+    for (const competitor of competitors) {
       const marker = new google.maps.Marker({
         position: { lat: competitor.lat, lng: competitor.lng },
         map,
@@ -83,18 +112,31 @@ export default function CompetitorMap({ latitude, longitude, radiusMeters, compe
 
       marker.addListener("click", () => {
         setSelectedCompetitor(competitor);
-        infoWindow.setContent(`
-          <div style="padding:4px;max-width:180px">
-            <div style="font-weight:600;font-size:13px;margin-bottom:2px">${competitor.name}</div>
-            <div style="font-size:11px;color:#666">${competitor.type.replace(/_/g, " ")}</div>
-            ${competitor.rating ? `<div style="font-size:11px;margin-top:4px">⭐ ${competitor.rating} (${competitor.userRatingsTotal?.toLocaleString() || 0} reviews)</div>` : ""}
-            <div style="font-size:11px;color:#666;margin-top:2px">${formatDistance(competitor.distanceMeters)} away</div>
-          </div>
-        `);
-        infoWindow.open(map, marker);
+        if (infoWindow) {
+          infoWindow.setContent(`
+            <div style="padding:4px;max-width:180px">
+              <div style="font-weight:600;font-size:13px;margin-bottom:2px">${competitor.name}</div>
+              <div style="font-size:11px;color:#666">${competitor.type.replace(/_/g, " ")}</div>
+              ${competitor.rating ? `<div style="font-size:11px;margin-top:4px">⭐ ${competitor.rating} (${competitor.userRatingsTotal?.toLocaleString() || 0} reviews)</div>` : ""}
+              <div style="font-size:11px;color:#666;margin-top:2px">${formatDistance(competitor.distanceMeters)} away</div>
+            </div>
+          `);
+          infoWindow.open(map, marker);
+        }
       });
-    });
-  }, [isLoaded]);
+
+      markersRef.current.push(marker);
+    }
+
+    return () => {
+      if (circleRef.current) {
+        circleRef.current.setMap(null);
+        circleRef.current = null;
+      }
+      for (const m of markersRef.current) m.setMap(null);
+      markersRef.current = [];
+    };
+  }, [latitude, longitude, radiusMeters, competitors]);
 
   if (loadError) {
     return (

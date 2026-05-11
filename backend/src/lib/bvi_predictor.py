@@ -26,7 +26,7 @@ except Exception as e:
 rwi_coords = None
 rwi_values = None
 try:
-    rwi_path = os.path.join(current_dir, "..", "data", "jakarta_rwi.csv")
+    rwi_path = os.path.join(current_dir, "..", "..", "data", "jakarta_rwi.csv")
     if os.path.exists(rwi_path):
         rwi_df = pd.read_csv(rwi_path)
         rwi_coords = rwi_df[['latitude', 'longitude']].values

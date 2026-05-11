@@ -7,19 +7,32 @@ import { AuthRequest } from "../middleware/auth";
 export async function analyzeProfile(req: AuthRequest, res: Response): Promise<void> {
   const profileId = String(req.params.profileId);
 
-  const profile = await prisma.businessProfile.findFirst({
-    where: { id: profileId, userId: req.userId! },
-  });
+  let profile;
+  try {
+    profile = await prisma.businessProfile.findFirst({
+      where: { id: profileId, userId: req.userId! },
+    });
+  } catch (err) {
+    console.error("analyzeProfile DB lookup error:", err);
+    res.status(500).json({ error: "Failed to start analysis. Please try again." });
+    return;
+  }
 
   if (!profile) {
     res.status(404).json({ error: "Business profile not found" });
     return;
   }
 
-  await prisma.businessProfile.update({
-    where: { id: profileId },
-    data: { status: "PROCESSING" },
-  });
+  try {
+    await prisma.businessProfile.update({
+      where: { id: profileId },
+      data: { status: "PROCESSING" },
+    });
+  } catch (err) {
+    console.error("analyzeProfile status update error:", err);
+    res.status(500).json({ error: "Failed to start analysis. Please try again." });
+    return;
+  }
 
   try {
     const competitors = await fetchNearbyCompetitors(
@@ -30,7 +43,7 @@ export async function analyzeProfile(req: AuthRequest, res: Response): Promise<v
     );
 
     const addressResponse = await fetch(
-      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${profile.latitude},${profile.longitude}&key=${process.env.VITE_GOOGLE_MAPS_API_KEY}`
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${profile.latitude},${profile.longitude}&key=${process.env.GOOGLE_MAPS_API_KEY ?? ""}`
     );
     const addressData = (await addressResponse.json()) as {
       results: Array<{ formatted_address: string }>;

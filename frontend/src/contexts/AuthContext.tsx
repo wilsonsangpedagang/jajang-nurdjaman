@@ -20,12 +20,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const storedToken = localStorage.getItem("ap_token");
-    const storedUser = localStorage.getItem("ap_user");
-    if (storedToken && storedUser) {
-      setToken(storedToken);
-      setUser(JSON.parse(storedUser) as User);
+    if (!storedToken) {
+      setIsLoading(false);
+      return;
     }
-    setIsLoading(false);
+    // Validate stored token against the backend before trusting it
+    authApi
+      .me()
+      .then(({ data }) => {
+        setToken(storedToken);
+        setUser(data.user);
+      })
+      .catch(() => {
+        // Token expired or invalid — wipe stored credentials
+        localStorage.removeItem("ap_token");
+        localStorage.removeItem("ap_user");
+      })
+      .finally(() => setIsLoading(false));
   }, []);
 
   const login = async (email: string, password: string) => {
