@@ -116,6 +116,30 @@ export default function HistoryPage() {
                             {profile.category}
                           </span>
                           <StatusPill status={profile.status} />
+                          {result?.zone && result.zone.zone_label !== "UNKNOWN" && (
+                            <span
+                              title={`Zona ${result.zone.zone_label} — ${result.zone.zone_name}`}
+                              className="flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold"
+                              style={{
+                                borderColor:
+                                  result.zone.zone_label === "MERAH"  ? "#ef4444" :
+                                  result.zone.zone_label === "KUNING" ? "#f59e0b" : "#22c55e",
+                                color:
+                                  result.zone.zone_label === "MERAH"  ? "#ef4444" :
+                                  result.zone.zone_label === "KUNING" ? "#f59e0b" : "#22c55e",
+                              }}
+                            >
+                              <span
+                                className="h-1.5 w-1.5 rounded-full"
+                                style={{
+                                  backgroundColor:
+                                    result.zone.zone_label === "MERAH"  ? "#ef4444" :
+                                    result.zone.zone_label === "KUNING" ? "#f59e0b" : "#22c55e",
+                                }}
+                              />
+                              {result.zone.zone_label}
+                            </span>
+                          )}
                         </div>
                       </div>
 

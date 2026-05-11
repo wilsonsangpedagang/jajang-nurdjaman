@@ -7,59 +7,72 @@ interface RoadmapCardProps {
 
 const SECTIONS = [
   {
-    key:      "differentiation" as const,
-    label:    "Product Differentiation",
-    icon:     Lightbulb,
-    accent:   "text-bar-plum",
-    iconBg:   "bg-bar-lavender/20",
-    numBg:    "bg-bar-lavender/20 text-bar-plum",
+    key:       "differentiation" as const,
+    label:     "Product Differentiation",
+    icon:      Lightbulb,
+    accentText:  "text-violet-400",
+    accentBg:    "bg-violet-500/10",
+    nodeBg:      "bg-violet-500/20 text-violet-300",
+    lineCls:     "bg-violet-500/20",
+    pillBorder:  "border-violet-500/30",
   },
   {
-    key:      "pricing" as const,
-    label:    "Pricing Strategy",
-    icon:     DollarSign,
-    accent:   "text-emerald-600",
-    iconBg:   "bg-emerald-50",
-    numBg:    "bg-emerald-50 text-emerald-600",
+    key:       "pricing" as const,
+    label:     "Pricing Strategy",
+    icon:      DollarSign,
+    accentText:  "text-emerald-400",
+    accentBg:    "bg-emerald-500/10",
+    nodeBg:      "bg-emerald-500/20 text-emerald-300",
+    lineCls:     "bg-emerald-500/20",
+    pillBorder:  "border-emerald-500/30",
   },
   {
-    key:      "marketing" as const,
-    label:    "Marketing & Visibility",
-    icon:     Megaphone,
-    accent:   "text-bvi-orange",
-    iconBg:   "bg-sticky-yellow/30",
-    numBg:    "bg-sticky-yellow/30 text-bvi-orange",
+    key:       "marketing" as const,
+    label:     "Marketing & Visibility",
+    icon:      Megaphone,
+    accentText:  "text-orange-400",
+    accentBg:    "bg-orange-500/10",
+    nodeBg:      "bg-orange-500/20 text-orange-300",
+    lineCls:     "bg-orange-500/20",
+    pillBorder:  "border-orange-500/30",
   },
 ];
 
 export default function RoadmapCard({ roadmap }: RoadmapCardProps) {
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
+    <div className="grid gap-5 sm:grid-cols-3">
       {SECTIONS.map((section) => (
         <div
           key={section.key}
-          className="rounded-2xl border border-card-border bg-white p-6"
+          className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur-xl"
         >
-          {/* Header */}
-          <div className="mb-5 flex items-center gap-2.5">
-            <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${section.iconBg}`}>
-              <section.icon className={`h-4 w-4 ${section.accent}`} />
-            </div>
-            <h3 className={`text-sm font-bold ${section.accent}`}>{section.label}</h3>
+          {/* Column header */}
+          <div className={`mb-5 flex items-center gap-2 rounded-full border ${section.pillBorder} ${section.accentBg} px-3 py-1.5 w-fit`}>
+            <section.icon className={`h-3.5 w-3.5 ${section.accentText}`} />
+            <span className={`text-xs font-bold ${section.accentText}`}>{section.label}</span>
           </div>
 
-          {/* Steps */}
-          <ol className="space-y-3.5">
-            {roadmap[section.key].map((tip, i) => (
-              <li key={i} className="flex items-start gap-3">
-                <span
-                  className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${section.numBg}`}
-                >
-                  {i + 1}
-                </span>
-                <span className="text-sm leading-relaxed text-foreground/80">{tip}</span>
-              </li>
-            ))}
+          {/* Timeline steps */}
+          <ol className="space-y-0">
+            {roadmap[section.key].map((tip, i) => {
+              const isLast = i === roadmap[section.key].length - 1;
+              return (
+                <li key={i} className="relative flex gap-3 pb-5">
+                  {/* Connector line — skip on last item */}
+                  {!isLast && (
+                    <div className={`absolute left-[10px] top-6 bottom-0 w-0.5 ${section.lineCls}`} />
+                  )}
+                  {/* Step node */}
+                  <div
+                    className={`relative z-10 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${section.nodeBg}`}
+                  >
+                    {i + 1}
+                  </div>
+                  {/* Step text */}
+                  <span className="pt-0.5 text-sm leading-relaxed text-slate-300">{tip}</span>
+                </li>
+              );
+            })}
           </ol>
         </div>
       ))}

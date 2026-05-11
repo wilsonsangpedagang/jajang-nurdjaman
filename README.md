@@ -54,15 +54,33 @@ npm run install:all
 **Do this: once per machine, skip if already done**
 
 ```bash
-pip3 install scikit-learn numpy pandas scipy xgboost
+pip3 install scikit-learn numpy pandas scipy xgboost geopandas shapely
 ```
 
 To check if they're already installed:
 ```bash
-python3 -c "import sklearn, numpy, pandas, scipy, xgboost; print('all good')"
+python3 -c "import sklearn, numpy, pandas, scipy, xgboost, geopandas, shapely; print('all good')"
 ```
 
 If it prints `all good`, skip this step.
+
+> **Note:** `geopandas` and `shapely` are required for the RTRW zone classification feature. If you only see warnings about zone data not loading, these packages may not be installed.
+
+---
+
+### STEP 3b — Fetch Jakarta RTRW zoning data
+**Do this: once per clone, or when you want fresh zoning data**
+
+AP Analytics classifies business locations against Jakarta's official RTRW (Rencana Tata Ruang Wilayah) zoning plan to warn users about restricted zones (Jalur Hijau / RTH).
+
+```bash
+cd apanalytics
+python3 backend/scripts/fetch_rtrw.py
+```
+
+This fetches polygon data from GISTARU ATR/BPN (with OSM Overpass as fallback) and saves it to `backend/data/jakarta_rtrw.geojson`. The file is git-ignored because it can be large.
+
+If the script fails, the app still works — zone classification will return `UNKNOWN` with a graceful fallback message.
 
 ---
 
@@ -330,4 +348,5 @@ apanalytics/
 | GET | `/api/business/:id` | JWT | Get single profile |
 | DELETE | `/api/business/:id` | JWT | Delete profile |
 | POST | `/api/analyze/:profileId` | JWT | Run BVI analysis |
+| GET | `/api/zone?lat=X&lng=Y` | — | RTRW zone classification |
 | GET | `/api/health` | — | Health check |

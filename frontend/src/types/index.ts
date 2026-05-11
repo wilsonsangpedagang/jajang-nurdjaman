@@ -59,6 +59,16 @@ export interface Competitor {
   distanceMeters: number;
 }
 
+export interface ZoneResult {
+  zone_label: "MERAH" | "KUNING" | "HIJAU" | "UNKNOWN";
+  zone_type: string | null;
+  zone_name: string;
+  green_zone_ratio: number;
+  commercial_ratio: number;
+  mixed_use_ratio: number;
+  is_restricted: boolean;
+}
+
 export interface AnalysisResult {
   swot: SwotAnalysis;
   successScore: number;
@@ -67,6 +77,7 @@ export interface AnalysisResult {
   summary: string;
   competitors: Competitor[];
   address: string;
+  zone?: ZoneResult;
 }
 
 export interface WizardData {
