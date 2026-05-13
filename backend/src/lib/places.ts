@@ -32,16 +32,30 @@ interface GooglePlacesNearbyResponse {
 
 const CATEGORY_MAP: Record<string, string[]> = {
   "f&b": ["restaurant", "cafe", "bar", "bakery"],
-  retail: ["shopping_mall", "supermarket", "clothing_store", "electronics_store", "convenience_store"],
-  beauty: ["beauty_salon", "hair_care", "spa"],
-  health: ["doctor", "hospital", "pharmacy", "dentist", "physiotherapist"],
-  education: ["school", "university", "library"],
-  entertainment: ["movie_theater", "amusement_park", "night_club", "bowling_alley"],
-  services: ["laundry", "car_repair", "plumber", "electrician"],
-  technology: ["electronics_store"],
+  "food & beverage": ["restaurant", "cafe", "bar", "bakery"],
+  "retail": ["shopping_mall", "supermarket", "clothing_store", "electronics_store", "convenience_store"],
+  "beauty": ["beauty_salon", "hair_care", "spa"],
+  "health": ["doctor", "hospital", "pharmacy", "dentist", "physiotherapist"],
+  "education": ["school", "university", "library"],
+  "entertainment": ["movie_theater", "amusement_park", "night_club", "bowling_alley"],
+  "services": ["laundry", "car_repair", "plumber", "electrician"],
+  "technology": ["electronics_store"],
 };
 
-const BLACKLISTED_TYPES = ["point_of_interest", "place_of_worship", "bank"];
+const BLACKLISTED_TYPES = ["place_of_worship", "bank"];
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) *
+      Math.sin(dLng / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 export async function fetchNearbyCompetitors(
   lat: number,
@@ -49,71 +63,86 @@ export async function fetchNearbyCompetitors(
   radiusMeters: number,
   category: string
 ): Promise<PlaceResult[]> {
+  console.log("FETCH_COMPETITORS_START:", { lat, lng, radiusMeters, category });
   const normalizedCategory = category.toLowerCase();
   const targetTypes = CATEGORY_MAP[normalizedCategory] || [];
   const allResults: PlaceResult[] = [];
   const seen = new Set<string>();
 
-  // Use the Old Places API (nearbysearch)
-  // Note: Old API only supports ONE type per request. We iterate through mapped types.
-  // If no mapped types, we search by keyword (category name) as a fallback.
   const searchTasks = targetTypes.length > 0 
     ? targetTypes.map(type => ({ type })) 
     : [{ keyword: category }];
 
-  for (const task of searchTasks) {
-    const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
-    url.searchParams.set("location", `${lat},${lng}`);
-    url.searchParams.set("radius", String(Math.min(radiusMeters, 50000)));
-    url.searchParams.set("key", PLACES_API_KEY);
+  const resultsArray = await Promise.all(
+    searchTasks.map(async (task) => {
+      const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
+      url.searchParams.set("location", `${lat},${lng}`);
+      url.searchParams.set("radius", String(Math.min(radiusMeters, 50000)));
+      url.searchParams.set("key", PLACES_API_KEY);
 
-    if ("type" in task) {
-      url.searchParams.set("type", task.type);
-    } else {
-      url.searchParams.set("keyword", task.keyword);
-    }
+      if ("type" in task) {
+        url.searchParams.set("type", task.type);
+      } else {
+        url.searchParams.set("keyword", task.keyword);
+      }
 
-    try {
-      const response = await fetch(url.toString());
-      if (!response.ok) continue;
+      console.log("GOOGLE_PLACES_REQUEST_URL:", url.toString());
 
-      const data = (await response.json()) as GooglePlacesNearbyResponse;
-      if (data.status !== "OK" && data.status !== "ZERO_RESULTS") continue;
+      try {
+        const response = await fetch(url.toString());
+        const data = await response.json() as GooglePlacesNearbyResponse;
+        
+        console.log("GOOGLE_PLACES_RESPONSE_STATUS:", data.status, "FOR_TASK:", JSON.stringify(task));
 
-      for (const place of data.results) {
-        if (seen.has(place.place_id)) continue;
-
-        // Exclusion Logic: Exclude blacklisted types
-        // Note: If the user category IS one of these (e.g. they search for 'bank'), 
-        // we might want to allow it, but the request says to exclude them as a fallback rule.
-        const isBlacklisted = place.types.some(t => BLACKLISTED_TYPES.includes(t));
-        if (isBlacklisted) {
-          // If we are searching for a specific type and that type is blacklisted, we still skip it
-          // per the requirement "exclude places like...".
-          continue;
+        if (data.status !== "OK" && data.status !== "ZERO_RESULTS") {
+          console.error("GOOGLE_PLACES_ERROR_DATA:", data);
+          return [];
         }
 
-        seen.add(place.place_id);
-
-        const dist = haversineDistance(lat, lng, place.geometry.location.lat, place.geometry.location.lng);
-        if (dist > radiusMeters) continue;
-
-        allResults.push({
-          name: place.name,
-          type: place.types[0] || (("type" in task) ? task.type : "establishment"),
-          rating: place.rating ?? null,
-          userRatingsTotal: place.user_ratings_total ?? null,
-          vicinity: place.vicinity,
-          placeId: place.place_id,
-          lat: place.geometry.location.lat,
-          lng: place.geometry.location.lng,
-          distanceMeters: Math.round(dist),
-        });
+        return data.results || [];
+      } catch (error) {
+        console.error("GOOGLE_PLACES_FETCH_ERROR:", error);
+        return [];
       }
-    } catch (error) {
-      console.error(`Error fetching competitors for ${JSON.stringify(task)}:`, error);
+    })
+  );
+
+  for (const results of resultsArray) {
+    for (const place of results) {
+      if (seen.has(place.place_id)) continue;
+
+      const isBlacklisted = place.types.some(t => BLACKLISTED_TYPES.includes(t));
+      if (isBlacklisted) {
+        console.log("SKIPPING_BLACKLISTED_PLACE:", place.name, "TYPES:", place.types);
+        continue;
+      }
+
+      seen.add(place.place_id);
+
+      const dist = haversineDistance(lat, lng, place.geometry.location.lat, place.geometry.location.lng);
+      
+      if (dist > radiusMeters) {
+        console.log("SKIPPING_TOO_FAR_PLACE:", place.name, "DIST:", Math.round(dist), "LIMIT:", radiusMeters);
+        continue;
+      }
+
+      console.log("ADDING_COMPETITOR:", place.name, "DIST:", Math.round(dist));
+
+      allResults.push({
+        name: place.name,
+        type: place.types[0] || "establishment",
+        rating: place.rating ?? null,
+        userRatingsTotal: place.user_ratings_total ?? null,
+        vicinity: place.vicinity,
+        placeId: place.place_id,
+        lat: place.geometry.location.lat,
+        lng: place.geometry.location.lng,
+        distanceMeters: Math.round(dist),
+      });
     }
   }
+
+  console.log("FINAL_COMPETITOR_COUNT:", allResults.length);
 
   return allResults.sort((a, b) => a.distanceMeters - b.distanceMeters);
 }
