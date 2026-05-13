@@ -30,18 +30,37 @@ interface GooglePlacesNearbyResponse {
   status: string;
 }
 
+const BLACKLISTED_TYPES = [
+  "place_of_worship",
+  "bank",
+  "atm",
+  "school",
+  "university",
+  "hospital",
+  "local_government_office",
+  "police",
+  "fire_station",
+  "cemetery",
+  "post_office",
+  "courthouse",
+  "embassy",
+  "city_hall",
+  "gas_station",
+  "parking",
+];
+
 function categoryToPlaceTypes(category: string): string[] {
   const mapping: Record<string, string[]> = {
-    "Food & Beverage": ["restaurant", "cafe", "food", "meal_takeaway", "bakery"],
-    Retail: ["store", "clothing_store", "shoe_store", "shopping_mall"],
+    "Food & Beverage": ["restaurant", "cafe", "bakery", "meal_takeaway"],
+    Retail: ["store", "clothing_store", "shopping_mall", "home_goods_store"],
     Beauty: ["beauty_salon", "hair_care", "spa"],
-    Health: ["pharmacy", "hospital", "gym", "health"],
-    Education: ["school", "university", "library"],
+    Health: ["pharmacy", "gym", "health"],
+    Education: ["school", "library"],
     Entertainment: ["movie_theater", "amusement_park", "bar", "night_club"],
     Services: ["laundry", "car_wash", "electrician", "plumber"],
     Technology: ["electronics_store", "computer_store"],
   };
-  return mapping[category] || ["establishment"];
+  return mapping[category] || [];
 }
 
 function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -67,12 +86,27 @@ export async function fetchNearbyCompetitors(
   const allResults: PlaceResult[] = [];
   const seen = new Set<string>();
 
-  for (const type of types.slice(0, 3)) {
+  // If we have specific types from mapping, use them. 
+  // Otherwise, or in addition, use the category name as a keyword.
+  const searchParams = types.length > 0 ? types.map(t => ({ type: t })) : [{ keyword: category }];
+  
+  // Also always add a keyword search for the category to catch relevant places 
+  // that might not have the correct Google "type"
+  if (types.length > 0) {
+    searchParams.push({ keyword: category });
+  }
+
+  for (const param of searchParams.slice(0, 4)) {
     const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
     url.searchParams.set("location", `${lat},${lng}`);
     url.searchParams.set("radius", String(Math.min(radiusMeters, 50000)));
-    url.searchParams.set("type", type);
     url.searchParams.set("key", PLACES_API_KEY);
+    
+    if ("type" in param) {
+      url.searchParams.set("type", param.type);
+    } else {
+      url.searchParams.set("keyword", param.keyword);
+    }
 
     const response = await fetch(url.toString());
     if (!response.ok) continue;
@@ -82,6 +116,16 @@ export async function fetchNearbyCompetitors(
 
     for (const place of data.results) {
       if (seen.has(place.place_id)) continue;
+      
+      // Filter out blacklisted types
+      const isBlacklisted = place.types.some(t => BLACKLISTED_TYPES.includes(t));
+      if (isBlacklisted) {
+        // Only allow if the target type is explicitly in the place types
+        // (e.g., if we ARE looking for a school, don't blacklist it)
+        const isTargetType = "type" in param && place.types.includes(param.type);
+        if (!isTargetType) continue;
+      }
+
       seen.add(place.place_id);
 
       const dist = haversineDistance(lat, lng, place.geometry.location.lat, place.geometry.location.lng);
@@ -89,7 +133,7 @@ export async function fetchNearbyCompetitors(
 
       allResults.push({
         name: place.name,
-        type: place.types[0] || type,
+        type: place.types[0] || (("type" in param) ? param.type : "establishment"),
         rating: place.rating ?? null,
         userRatingsTotal: place.user_ratings_total ?? null,
         vicinity: place.vicinity,
